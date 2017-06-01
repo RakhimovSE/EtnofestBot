@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="Amazon RakhimovSE">
+    <serverData>
+      <paths name="Amazon RakhimovSE">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/EtnofestBot" local="$PROJECT_DIR$" web="" />
+            <mapping deploy="/RSETestBot" local="$PROJECT_DIR$/../RSETestBot" web="" />
+            <mapping deploy="/LastfmVkStatus" local="$PROJECT_DIR$/../LastfmVkStatus" web="" />
+            <mapping deploy="/RakhimovSE_Bot" local="$PROJECT_DIR$/../RakhimovSE_Bot" web="" />
+            <mapping deploy="/RussianMatBot" local="$PROJECT_DIR$/../RussianMatBot" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

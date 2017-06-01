@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataSource name="ds.sqlite">
+  <database-model serializer="dbm" rdbms="SQLITE" format-version="4.1">
+    <root id="1"/>
+    <schema id="2" parent="1" name="main">
+      <Current>1</Current>
+      <Visible>1</Visible>
+    </schema>
+    <table id="3" parent="2" name="sqlite_master"/>
+    <table id="4" parent="2" name="sqlite_sequence"/>
+    <table id="5" parent="2" name="user"/>
+    <table id="6" parent="2" name="user_event"/>
+    <table id="7" parent="2" name="user_question"/>
+    <column id="8" parent="3" name="type">
+      <DataType>text|0</DataType>
+    </column>
+    <column id="9" parent="3" name="name">
+      <Position>1</Position>
+      <DataType>text|0</DataType>
+    </column>
+    <column id="10" parent="3" name="tbl_name">
+      <Position>2</Position>
+      <DataType>text|0</DataType>
+    </column>
+    <column id="11" parent="3" name="rootpage">
+      <Position>3</Position>
+      <DataType>integer|0</DataType>
+    </column>
+    <column id="12" parent="3" name="sql">
+      <Position>4</Position>
+      <DataType>text|0</DataType>
+    </column>
+    <column id="13" parent="4" name="name">
+      <DataType>|0</DataType>
+    </column>
+    <column id="14" parent="4" name="seq">
+      <Position>1</Position>
+      <DataType>|0</DataType>
+    </column>
+    <column id="15" parent="5" name="id_user">
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="16" parent="5" name="username">
+      <Position>1</Position>
+      <DataType>TEXT|0</DataType>
+    </column>
+    <column id="17" parent="5" name="first_name">
+      <Position>2</Position>
+      <DataType>TEXT|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="18" parent="5" name="last_name">
+      <Position>3</Position>
+      <DataType>TEXT|0</DataType>
+    </column>
+    <column id="19" parent="5" name="phone_number">
+      <Position>4</Position>
+      <DataType>TEXT|0</DataType>
+    </column>
+    <column id="20" parent="5" name="newsletter">
+      <Position>5</Position>
+      <DataType>INT|0</DataType>
+      <NotNull>1</NotNull>
+      <DefaultExpression>1</DefaultExpression>
+    </column>
+    <column id="21" parent="5" name="admin">
+      <Position>6</Position>
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+      <DefaultExpression>0</DefaultExpression>
+    </column>
+    <column id="22" parent="5" name="signin_timestamp">
+      <Position>7</Position>
+      <DataType>DATETIME|0</DataType>
+    </column>
+    <column id="23" parent="5" name="signout_timestamp">
+      <Position>8</Position>
+      <DataType>DATETIME|0</DataType>
+    </column>
+    <key id="24" parent="5">
+      <ColNames>id_user</ColNames>
+      <Primary>1</Primary>
+    </key>
+    <column id="25" parent="6" name="user_id">
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="26" parent="6" name="calendar_id">
+      <Position>1</Position>
+      <DataType>TEXT|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="27" parent="6" name="event_id">
+      <Position>2</Position>
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <index id="28" parent="6" name="sqlite_autoindex_user_event_1">
+      <ColNames>user_id
+calendar_id
+event_id</ColNames>
+      <Unique>1</Unique>
+    </index>
+    <key id="29" parent="6">
+      <ColNames>user_id
+calendar_id
+event_id</ColNames>
+      <Primary>1</Primary>
+      <UnderlyingIndexName>sqlite_autoindex_user_event_1</UnderlyingIndexName>
+    </key>
+    <foreign-key id="30" parent="6">
+      <ColNames>user_id</ColNames>
+      <RefTableName>user</RefTableName>
+      <RefColNames>id_user</RefColNames>
+    </foreign-key>
+    <column id="31" parent="7" name="id_question">
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="32" parent="7" name="user_id">
+      <Position>1</Position>
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+    </column>
+    <column id="33" parent="7" name="answered">
+      <Position>2</Position>
+      <DataType>INTEGER|0</DataType>
+      <NotNull>1</NotNull>
+      <DefaultExpression>0</DefaultExpression>
+    </column>
+    <column id="34" parent="7" name="timestamp">
+      <Position>3</Position>
+      <DataType>DATETIME|0</DataType>
+      <NotNull>1</NotNull>
+      <DefaultExpression>datetime(&apos;now&apos;,&apos;utc&apos;)</DefaultExpression>
+    </column>
+    <index id="35" parent="7" name="sqlite_autoindex_user_question_1">
+      <ColNames>id_question
+user_id</ColNames>
+      <Unique>1</Unique>
+    </index>
+    <key id="36" parent="7">
+      <ColNames>id_question
+user_id</ColNames>
+      <Primary>1</Primary>
+      <UnderlyingIndexName>sqlite_autoindex_user_question_1</UnderlyingIndexName>
+    </key>
+    <foreign-key id="37" parent="7">
+      <ColNames>user_id</ColNames>
+      <RefTableName>user</RefTableName>
+      <RefColNames>id_user</RefColNames>
+    </foreign-key>
+  </database-model>
+</dataSource>

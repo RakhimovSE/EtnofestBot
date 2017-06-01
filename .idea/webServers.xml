@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="855f0e9d-108a-43c1-a50c-d83c6d04b68f" name="Amazon RakhimovSE" url="http://54.244.97.201">
+        <fileTransfer host="54.244.97.201" port="22" privateKey="S:\Dropbox\Работа\Amazon RakhimovSE\main_kp.ppk" rootFolder="/var/www/python" accessType="SFTP" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
