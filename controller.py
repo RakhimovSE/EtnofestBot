@@ -62,18 +62,23 @@ def send_user_question(admin_id, user_id, question_id):
         buttons.append(types.InlineKeyboardButton('❌ Отклонить', callback_data=callback_data))
         keyboard.add(*buttons)
         bot.send_message(admin_id, 'Выберите действие', reply_markup=keyboard)
+        return True
     except Exception as e:
         # db.answer_user_question(question['user_id'], question['id_question'])
-        pass
+        return False
 
 
-def send_user_questions(admin_id, from_last_signout = True):
+def send_user_questions(admin_id, from_last_signout = True, only_unanswered = True):
     db = SQLighter(db_name)
-    questions = db.get_user_questions(admin_id if from_last_signout else None)
+    questions = db.get_user_questions(admin_id if from_last_signout else None, only_unanswered)
     if questions and from_last_signout:
         bot.send_message(admin_id, 'Поступили новые вопросы от пользователей')
+    sended_questions = 0
     for question in questions:
-        send_user_question(admin_id, question['user_id'], question['id_question'])
+        if send_user_question(admin_id, question['user_id'], question['id_question']):
+            sended_questions += 1
+    if sended_questions == 0 and not from_last_signout:
+        bot.send_message(admin_id, 'Новых вопросов не поступало')
 
 
 def add_user_question(user_id, question_id):

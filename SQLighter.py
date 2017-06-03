@@ -37,21 +37,33 @@ class SQLighter:
             self.cursor.execute('INSERT INTO user_question (id_question, user_id) VALUES (?, ?)',
                                 (message_id, user_id,))
 
-    def get_user_questions(self, admin_id = None):
+    def get_user_questions(self, admin_id=None, only_unanswered=True):
         with self.connection:
             if admin_id:
                 admin = self.get_user(admin_id)
-                result = self.cursor.execute('SELECT * FROM user_question WHERE '
-                                             '"timestamp" BETWEEN IFNULL(?, 0) AND ? AND answered = 0',
-                                             (admin['signout_timestamp'], admin['signin_timestamp'],)).fetchall()
+                if only_unanswered:
+                    result = self.cursor.execute(
+                        'SELECT * FROM user_question WHERE '
+                        '"timestamp" BETWEEN IFNULL(?, 0) AND ? AND answer_user_id IS NULL',
+                        (admin['signout_timestamp'], admin['signin_timestamp'],)).fetchall()
+                else:
+                    result = self.cursor.execute(
+                        'SELECT * FROM user_question WHERE '
+                        '"timestamp" BETWEEN IFNULL(?, 0) AND ?',
+                        (admin['signout_timestamp'], admin['signin_timestamp'],)).fetchall()
             else:
-                result = self.cursor.execute('SELECT * FROM user_question WHERE answered = 0').fetchall()
+                if only_unanswered:
+                    result = self.cursor.execute('SELECT * FROM user_question WHERE answer_user_id IS NULL').fetchall()
+                else:
+                    result = self.cursor.execute('SELECT * FROM user_question').fetchall()
             return result
 
-    def answer_user_question(self, user_id, question_id, answered = 1):
+    def answer_user_question(self, user_id, question_id, answer_user_id, answer_message_id=None):
         with self.connection:
-            self.cursor.execute('UPDATE user_question SET answered = ? WHERE user_id = ? AND id_question = ?',
-                                (answered, user_id, question_id,))
+            print(answer_message_id)
+            self.cursor.execute('UPDATE user_question SET answer_user_id = ?, answer_message_id = ?'
+                                'WHERE user_id = ? AND id_question = ?',
+                                (answer_user_id, answer_message_id, user_id, question_id,))
 
     def get_user_events(self, user_id):
         with self.connection:
@@ -87,13 +99,45 @@ class SQLighter:
 
     def is_admin(self, user_id):
         with self.connection:
-            result = self.cursor.execute('SELECT * FROM user WHERE id_user = ?', (user_id,)).fetchall()
-            return True if result and result[0]['admin'] == 1 else False
+            result = self.cursor.execute('SELECT * FROM user WHERE id_user = ?', (user_id,)).fetchone()
+            return result and result['admin']
 
     def get_admins(self):
         with self.connection:
             result = self.cursor.execute('SELECT * FROM user WHERE admin = 1').fetchall()
             return result
+
+    def get_calendars(self):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM calendar').fetchall()
+            return result
+
+    def get_calendar_by_index(self, calendar_index):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM calendar WHERE "index" = ?', (calendar_index,)).fetchone()
+            return result
+
+    def get_calendar_by_id(self, calendar_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM calendar WHERE id_calendar = ?', (calendar_id,)).fetchone()
+            return result
+
+    def get_event_by_index(self, event_index):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM event WHERE "index" = ?', (event_index,)).fetchone()
+            return result
+
+    def get_event_by_id(self, calendar_id, event_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM event WHERE calendar_id = ? AND id_event = ?',
+                                         (calendar_id, event_id,)).fetchone()
+            return result
+
+    def insert_event(self, calendar_id, event_id):
+        with self.connection:
+            if not self.get_event_by_id(calendar_id, event_id):
+                result = self.cursor.execute('INSERT INTO event (calendar_id, id_event) VALUES (?, ?)',
+                                            (calendar_id, event_id,))
 
     def close(self):
         self.connection.close()

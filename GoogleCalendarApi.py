@@ -10,7 +10,7 @@ from oauth2client.file import Storage
 import datetime
 import dateutil.parser
 import configparser
-import json
+from SQLighter import SQLighter
 
 
 class GoogleCalendarApi:
@@ -67,49 +67,30 @@ class GoogleCalendarApi:
         return service
 
     def get_html_links(self):
-        calendar_dict = self.get_calendars()
+        db = SQLighter(self.__config.get('BOT', 'db_name'))
+        calendars = db.get_calendars()
         url_template = self.__config.get('BOT', 'webcal')
         result = []
-        for item in calendar_dict:
-            url = url_template.replace('{{calendar_id}}', item['id'])
-            result.append('<a href=\'%s\'>%s</a>' % (url, item['name']))
-        return result
-
-    def get_calendars(self):
-        response = self.service.calendarList().list().execute()
-        result = []
-        order = {
-            'Концерты': 0,
-            'Мастер-классы': 1,
-            'Детская программа': 2,
-            'Русский городок': 3,
-            'Тематические городки': 4,
-            'Тематические площадки': 5
-        }
-        for item in response['items']:
-            result.append({
-                'index': order.get(item['summary'].replace('НиЗ ', ''), -1),
-                'name': item['summary'].replace('НиЗ ', ''),
-                'id': item['id']
-            })
-        result.sort(key=lambda x: x['index'])
+        for calendar in calendars:
+            url = url_template.replace('{{calendar_id}}', calendar['id_calendar'])
+            result.append('<a href=\'%s\'>%s</a>' % (url, calendar['name']))
         return result
 
     def get_event(self, calendar_id, event_id):
         response = self.service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         if response['status'] != 'confirmed':
             return None
-        calendars = self.get_calendars()
+        db = SQLighter(self.__config.get('BOT', 'db_name'))
+        calendar = db.get_calendar_by_id(calendar_id)
+        event = db.get_event_by_id(calendar_id, event_id)
         response['calendar_id'] = calendar_id
-        for i in range(0, len(calendars)):
-            if calendars[i]['id'] == calendar_id:
-                response['calendar_index'] = i
-                break
+        response['calendar_index'] = calendar['index']
         result = {
             'calendar_id': response['calendar_id'],
             'calendar_index': response['calendar_index'],
-            'id': int(response['id']),
-            'area': calendars[i]['name'],
+            'id': response['id'],
+            'event_index': event['index'],
+            'area': calendar['name'],
             'name': response['summary'],
             'location': response.get('location', ''),
             'datetime_start': dateutil.parser.parse(response['start'].get('dateTime', response['start'].get('date'))),
@@ -119,6 +100,7 @@ class GoogleCalendarApi:
 
     def get_events(self, events):
         result = [self.get_event(e['calendar_id'], e['event_id']) for e in events]
+        result = [x for x in result if x]
         result.sort(key=lambda e: e['datetime_start'])
         return result
 
@@ -128,55 +110,41 @@ class GoogleCalendarApi:
         if time_max:
             time_max = time_max.isoformat() + '+05:00'
         responses = []
-        calendars = self.get_calendars()
+        db = SQLighter(self.__config.get('BOT', 'db_name'))
+        calendars = db.get_calendars()
         if not calendar_id:
-            for i in range(0, len(calendars)):
+            for calendar in calendars:
                 response = self.service.events().list(
-                    calendarId=calendars[i]['id'], timeMin=time_min, timeMax=time_max,
+                    calendarId=calendar['id_calendar'], timeMin=time_min, timeMax=time_max,
                     singleEvents=True, orderBy='startTime').execute()
-                response['calendar_id'] = calendars[i]['id']
-                response['calendar_index'] = i
+                [db.insert_event(calendar['id_calendar'], event['id']) for event in response['items']]
+                response['calendar_id'] = calendar['id_calendar']
+                response['calendar_index'] = calendar['index']
                 responses.append(response)
         else:
             response = self.service.events().list(
                 calendarId=calendar_id, timeMin=time_min, timeMax=time_max,
                 singleEvents=True, orderBy='startTime').execute()
+            [db.insert_event(calendar_id, event['id']) for event in response['items']]
             response['calendar_id'] = calendar_id
-            for i in range(0, len(calendars)):
-                if calendars[i]['id'] == calendar_id:
-                    response['calendar_index'] = i
-                    break
+            calendar = db.get_calendar_by_id(calendar_id)
+            response['calendar_index'] = calendar['index']
             responses.append(response)
         events = []
         for response in responses:
             events.extend([{
                 'calendar_id': response['calendar_id'],
                 'calendar_index': response['calendar_index'],
-                'id': int(e['id']),
+                'id': event['id'],
+                'event_index': db.get_event_by_id(response['calendar_id'], event['id'])['index'],
                 'area': response['summary'],
-                'name': e['summary'],
-                'location': e.get('location', ''),
-                'datetime_start': dateutil.parser.parse(e['start'].get('dateTime', e['start'].get('date'))),
-                'datetime_end': dateutil.parser.parse(e['end'].get('dateTime', e['end'].get('date')))
-            } for e in response['items']])
+                'name': event['summary'],
+                'location': event.get('location', ''),
+                'datetime_start': dateutil.parser.parse(event['start'].get('dateTime', event['start'].get('date'))),
+                'datetime_end': dateutil.parser.parse(event['end'].get('dateTime', event['end'].get('date')))
+            } for event in response['items']])
         events.sort(key=lambda e: e['datetime_start'])
         return events
-
-    def test(self):
-        now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
-        print(now)
-        print('Getting the upcoming 10 events')
-        events_result = self.service.events().list(
-            calendarId='primary', timeMin=now, maxResults=10, singleEvents=True,
-            orderBy='startTime').execute()
-        events = events_result.get('items', [])
-
-        if not events:
-            print('No upcoming events found.')
-        for event in events:
-            # print(event)
-            start = dateutil.parser.parse(event['start'].get('dateTime', event['start'].get('date')))
-            print(start, event['summary'])
 
     def close(self):
         pass

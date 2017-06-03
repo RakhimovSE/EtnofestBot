@@ -87,145 +87,190 @@ def handle_webcal_msg(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('question'))
 def callback_question_msg(call):
+    # question_{{type}}_{{user_id}}_{{message_id}}
     call_data = controller.get_call_data(call.data)
     db = SQLighter(db_name)
     if call_data[1] == 'answer':
         def process_answer_step(inner_msg):
+            if inner_msg.text.lower() == 'отмена':
+                controller.show_main_menu(inner_msg.chat.id)
+                return
+            db = SQLighter(db_name)
             try:
                 bot.send_message(call_data[2], inner_msg.text, reply_to_message_id=call_data[3])
                 bot.edit_message_text('На вопрос дан ответ', call.message.chat.id, call.message.message_id)
-            except:
-                pass
+                db.answer_user_question(call_data[2], call_data[3], inner_msg.chat.id, inner_msg.message_id)
+            except Exception as e:
+                print(str(e))
             controller.show_main_menu(inner_msg.chat.id)
 
-        msg = bot.send_message(call.message.chat.id, 'Введите ответ на вопрос',
+        msg = bot.send_message(call.message.chat.id, 'Напишите ответ на вопрос или введите "отмена"',
                                reply_markup=types.ReplyKeyboardRemove())
         bot.register_next_step_handler(msg, process_answer_step)
     elif call_data[1] == 'decline':
         bot.edit_message_text('Вопрос отклонён', call.message.chat.id, call.message.message_id)
-    db.answer_user_question(call_data[2], call_data[3])
+    db.answer_user_question(call_data[2], call_data[3], call.message.chat.id)
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule'))
-def callback_schedule_msg(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_getdate'))
+def callback_schedule_getdate_msg(call):
+    calendar_index = controller.get_call_data(call.data)[2]
+    db = SQLighter(db_name)
+    calendar = db.get_calendar_by_index(calendar_index)
+    keyboard = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    for day in range(8, 13):
+        callback_data = 'schedule_gettime_%d_%d' % (calendar_index, day)
+        button = types.InlineKeyboardButton('%d июня' % day, callback_data=callback_data)
+        buttons.append(button)
+    callback_data = 'schedule_main' if calendar_index == -1 else 'schedule_area_%d' % calendar_index
+    button = types.InlineKeyboardButton(text='↩ Назад', callback_data=callback_data)
+    buttons.append(button)
+    keyboard.add(*buttons)
+    if calendar_index == -1:
+        text = 'Вывод расписания по <b>всем</b> площадкам'
+    else:
+        text = 'Вывод расписания по площадке <b>"%s"</b>' % calendar['name']
+    text += '\nКакой день вас интересует?'
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                          parse_mode='HTML', reply_markup=keyboard)
+
+
+def get_time_inline_keyboard(calendar_index, day):
+    result = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    for hour_max in range(10, 25, 2):
+        hour_min = 0 if hour_max == 10 else hour_max - 2
+        text = 'С %d по %d' % (hour_min, hour_max)
+        callback_data = 'schedule_printevent_%d_%d_%d_%d' % (calendar_index, day, hour_min, hour_max)
+        button = types.InlineKeyboardButton(text, callback_data=callback_data)
+        buttons.append(button)
+    button = types.InlineKeyboardButton('↩ Назад', callback_data='schedule_getdate_%d' % calendar_index)
+    buttons.append(button)
+    result.add(*buttons)
+    return result
+
+
+def send_gettime_msg(user_id, calendar_index, day):
+    keyboard = get_time_inline_keyboard(calendar_index, day)
+    bot.send_message(user_id, 'Выберите время', reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_gettime'))
+def callback_schedule_gettime_msg(call):
+    calendar_index, day = controller.get_call_data(call.data)[2:]
+    send_gettime_msg(call.message.chat.id, calendar_index, day)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_insert'))
+def callback_schedule_insert_msg(call):
+    calendar_index, event_index = controller.get_call_data(call.data)[2:]
+    db = SQLighter(db_name)
+    calendar = db.get_calendar_by_index(calendar_index)
+    event = db.get_event_by_index(event_index)
+    db.insert_user_event(call.message.chat.id, calendar['id_calendar'], event['id_event'])
+    keyboard = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(
+        '🗑️Удалить из моего расписания',
+        callback_data='schedule_delete_%d_%d' % (calendar_index, event_index))
+    keyboard.add(button)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_delete'))
+def callback_schedule_delete_msg(call):
+    calendar_index, event_index = controller.get_call_data(call.data)[2:]
+    db = SQLighter(db_name)
+    calendar = db.get_calendar_by_index(calendar_index)
+    event = db.get_event_by_index(event_index)
+    db.delete_user_event(call.message.chat.id, calendar['id_calendar'], event['id_event'])
+    keyboard = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(
+        '⭐ Добавить в моё расписание',
+        callback_data='schedule_insert_%d_%d' % (calendar_index, event_index))
+    keyboard.add(button)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_area'))
+def callback_schedule_area_msg(call):
+    keyboard = types.InlineKeyboardMarkup()
+    db = SQLighter(db_name)
+    calendars = db.get_calendars()
+    for i in range(0, len(calendars)):
+        text = calendars[i]['name']
+        button = types.InlineKeyboardButton(text=text, callback_data=('schedule_getdate_%d' % i))
+        keyboard.add(button)
+    button = types.InlineKeyboardButton(text='↩ Назад', callback_data='schedule_main')
+    keyboard.add(button)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_my'))
+def callback_schedule_my_msg(call):
+    db = SQLighter(db_name)
+    db_events = [{
+        'calendar_id': e['calendar_id'],
+        'event_id': e['event_id']
+    } for e in db.get_user_events(call.message.chat.id)]
+    events = gcal_api.get_events(db_events)
+    for event in events:
+        callback_data = 'schedule_delete_%d_%d' % (event['calendar_index'], event['event_index'])
+        keyboard = types.InlineKeyboardMarkup()
+        button = types.InlineKeyboardButton('🗑️Удалить из моего расписания', callback_data=callback_data)
+        keyboard.add(button)
+        text = '<b>%s</b>\n%s' % (event['name'], event['area'])
+        if event['location']:
+            text += '\n' + event['location']
+        text += '\n' + controller.get_formatted_event_date(event['datetime_start'], event['datetime_end'])
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
+    if not events:
+        bot.send_message(call.message.chat.id, 'Мероприятие будет добавлено в ваш календарь '
+                                               'после того, как вы нажмете кнопку\n"⭐ Добавить в моё расписание"')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_main'))
+def callback_schedule_main_msg(call):
+    send_calendar_main_msg(call.message, True)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_printevent'))
+def callback_schedule_printevent_msg(call):
     # call.data = 'schedule_{{type}}_{{calendar_index}}_{{day}}_{{time_min}}_{{time_max}}'
-    call_data = controller.get_call_data(call.data)
-    calendars = gcal_api.get_calendars()
-    if call_data[1] == 'getdate':
+    calendar_index, day, hour_min, hour_max = controller.get_call_data(call.data)[2:]
+    db = SQLighter(db_name)
+    calendar_id = None if calendar_index == -1 else db.get_calendar_by_index(calendar_index)['id_calendar']
+    time_min = dateutil.parser.parse('2017-06-%dT%d:00:00' % (day, hour_min))
+    if hour_max < 24:
+        time_max = dateutil.parser.parse('2017-06-%dT%d:00:00' % (day, hour_max))
+    else:
+        time_max = dateutil.parser.parse('2017-06-%dT00:00:00' % (day + 1))
+    events = gcal_api.get_calendar_events(calendar_id=calendar_id, time_min=time_min, time_max=time_max)
+    db = SQLighter(db_name)
+    db_events = db.get_user_events(call.message.chat.id)
+    for event in events:
         keyboard = types.InlineKeyboardMarkup()
-        for day in range(8, 13):
-            callback_data = 'schedule_printevent_%d_%d_0_10' % (call_data[2], day)
-            button = types.InlineKeyboardButton('%d июня' % day, callback_data=callback_data)
-            keyboard.add(button)
-        button = types.InlineKeyboardButton(text='Отмена', callback_data='schedule_main')
-        keyboard.add(button)
-        text = 'Вывод расписания по <b>всем</b> площадкам' if call_data[2] == -1 else \
-            'Вывод расписания по площадке <b>"%s"</b>' % calendars[call_data[2]]['name']
-        text += '\nКакой день вас интересует?'
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
-                              parse_mode='HTML', reply_markup=keyboard)
-    elif call_data[1] == 'printevent':
-        calendar_id = None if call_data[2] == -1 else calendars[call_data[2]]['id']
-        time_min = dateutil.parser.parse('2017-06-%dT%d:00:00' % (call_data[3], call_data[4]))
-        if call_data[5] < 24:
-            time_max = dateutil.parser.parse('2017-06-%dT%d:00:00' % (call_data[3], call_data[5]))
+        if not any(x for x in db_events
+                   if x['user_id'] == call.message.chat.id
+                   and x['calendar_id'] == event['calendar_id']
+                   and x['event_id'] == event['id']):
+            callback_data = 'schedule_insert_%d_%d' % (event['calendar_index'], event['event_index'])
+            button = types.InlineKeyboardButton('⭐ Добавить в моё расписание', callback_data=callback_data)
         else:
-            time_max = dateutil.parser.parse('2017-06-%dT00:00:00' % (call_data[3] + 1))
-        events = gcal_api.get_calendar_events(calendar_id=calendar_id, time_min=time_min, time_max=time_max)
-        db = SQLighter(db_name)
-        db_events = db.get_user_events(call.message.chat.id)
-        for event in events:
-            keyboard = types.InlineKeyboardMarkup()
-            if not any(x for x in db_events
-                       if x['user_id'] == call.message.chat.id
-                       and x['calendar_id'] == event['calendar_id']
-                       and x['event_id'] == event['id']):
-                callback_data = 'schedule_insert_%d_%d' % (event['calendar_index'], event['id'])
-                button = types.InlineKeyboardButton('⭐ Добавить в моё расписание', callback_data=callback_data)
-            else:
-                callback_data = 'schedule_delete_%d_%d' % (event['calendar_index'], event['id'])
-                button = types.InlineKeyboardButton('🗑️Удалить из моего расписания', callback_data=callback_data)
-            keyboard.add(button)
-            text = '<b>%s</b>\n%s' % (event['name'], event['area'])
-            if event['location']:
-                text += '\n' + event['location']
-            text += '\n' + controller.get_formatted_event_date(event['datetime_start'], event['datetime_end'])
-            bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
-        keyboard = types.InlineKeyboardMarkup()
-        if call_data[4] > 0:
-            text = 'Предыдущие с %d:00 по %d:00' % (call_data[4] - 2, call_data[4])
-            callback_data = 'schedule_printevent_%d_%d_%d_%d' % \
-                            (call_data[2], call_data[3], call_data[4] - 2, call_data[4])
-            button = types.InlineKeyboardButton(text, callback_data=callback_data)
-            keyboard.add(button)
-        if call_data[5] < 24:
-            text = 'Следующие с %d:00 по %d:00' % (call_data[5], call_data[5] + 2)
-            callback_data = 'schedule_printevent_%d_%d_%d_%d' % \
-                            (call_data[2], call_data[3], call_data[5], call_data[5] + 2)
-            button = types.InlineKeyboardButton(text, callback_data=callback_data)
-            keyboard.add(button)
-        button = types.InlineKeyboardButton('Назад', callback_data='schedule_getdate_%d' % call_data[2])
-        keyboard.add(button)
-        text = '' if events else 'С %d:00 по %d:00 не запланировано мероприятий\n' % (call_data[4], call_data[5])
-        text += 'Показать следующие мероприятия?'
-        if events:
-            bot.send_message(call.message.chat.id, text, reply_markup=keyboard)
-        else:
-            bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
-            # [print(controller.get_formatted_event_date(e['datetime_start'], e['datetime_end'])) for e in events]
-    elif call_data[1] == 'insert':
-        db = SQLighter(db_name)
-        db.insert_user_event(call.message.chat.id, calendars[call_data[2]]['id'], call_data[3])
-        keyboard = types.InlineKeyboardMarkup()
-        button = types.InlineKeyboardButton(
-            '🗑️Удалить из моего расписания',
-            callback_data='schedule_delete_%d_%d' % (call_data[2], call_data[3]))
-        keyboard.add(button)
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
-    elif call_data[1] == 'delete':
-        db = SQLighter(db_name)
-        db.delete_user_event(call.message.chat.id, calendars[call_data[2]]['id'], call_data[3])
-        keyboard = types.InlineKeyboardMarkup()
-        button = types.InlineKeyboardButton(
-            '⭐ Добавить в моё расписание',
-            callback_data='schedule_insert_%d_%d' % (call_data[2], call_data[3]))
-        keyboard.add(button)
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
-    elif call_data[1] == 'area':
-        keyboard = types.InlineKeyboardMarkup()
-        for i in range(0, len(calendars)):
-            text = calendars[i]['name']
-            button = types.InlineKeyboardButton(text=text, callback_data=('schedule_getdate_%d' % i))
-            keyboard.add(button)
-        button = types.InlineKeyboardButton(text='Отмена', callback_data='schedule_main')
-        keyboard.add(button)
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=keyboard)
-    elif call_data[1] == 'my':
-        db = SQLighter(db_name)
-        db_events = db.get_user_events(call.message.chat.id)
-        events = [{
-            'calendar_id': e['calendar_id'],
-            'event_id': e['event_id']
-        } for e in db_events]
-        events = gcal_api.get_events(events)
-        for event in events:
-            if not event:
-                db.delete_user_event(call.message.chat.id, event['calendar_id'], event['id'])
-                continue
-            callback_data = 'schedule_delete_%d_%d' % (event['calendar_index'], event['id'])
-            keyboard = types.InlineKeyboardMarkup()
+            callback_data = 'schedule_delete_%d_%d' % (event['calendar_index'], event['event_index'])
             button = types.InlineKeyboardButton('🗑️Удалить из моего расписания', callback_data=callback_data)
-            keyboard.add(button)
-            text = '<b>%s</b>\n%s' % (event['name'], event['area'])
-            if event['location']:
-                text += '\n' + event['location']
-            text += '\n' + controller.get_formatted_event_date(event['datetime_start'], event['datetime_end'])
-            bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
-        if not db_events:
-            bot.send_message(call.message.chat.id, 'Мероприятие будет добавлено в ваш календарь '
-                                                   'после того, как вы нажмете кнопку\n"⭐ Добавить в моё расписание"')
-    elif call_data[1] == 'main':
-        send_calendar_main_msg(call.message, True)
+        keyboard.add(button)
+        text = '<b>%s</b>\n%s' % (event['name'], event['area'])
+        if event['location']:
+            text += '\n' + event['location']
+        text += '\n' + controller.get_formatted_event_date(event['datetime_start'], event['datetime_end'])
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
+    if events:
+        send_gettime_msg(call.message.chat.id, calendar_index, day)
+    else:
+        text = 'С %d:00 по %d:00 не запланировано мероприятий\n' % (hour_min, hour_max)
+        keyboard = get_time_inline_keyboard(calendar_index, day)
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
 
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Вопросы и ответы')
