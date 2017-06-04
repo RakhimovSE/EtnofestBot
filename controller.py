@@ -1,8 +1,8 @@
 import hashlib
-import telebot
 from telebot import types
 import shelve
 from datetime import datetime
+import json
 
 from SQLighter import SQLighter
 from main import db_name, shelve_name, bot
@@ -66,6 +66,46 @@ def send_user_question(admin_id, user_id, question_id):
     except Exception as e:
         # db.answer_user_question(question['user_id'], question['id_question'])
         return False
+
+
+def get_time_inline_keyboard(calendar_index, day):
+    result = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    for hour_max in range(10, 25, 2):
+        hour_min = 0 if hour_max == 10 else hour_max - 2
+        text = 'С %d по %d' % (hour_min, hour_max)
+        callback_data = 'schedule_printevent_%d_%d_%d_%d' % (calendar_index, day, hour_min, hour_max)
+        button = types.InlineKeyboardButton(text, callback_data=callback_data)
+        buttons.append(button)
+    button = types.InlineKeyboardButton('↩ Назад', callback_data='schedule_getdate_%d' % calendar_index)
+    buttons.append(button)
+    result.add(*buttons)
+    return result
+
+
+def send_gettime_msg(user_id, calendar_index, day):
+    keyboard = get_time_inline_keyboard(calendar_index, day)
+    bot.send_message(user_id, 'Выберите время', reply_markup=keyboard)
+
+
+def get_faq_inline_keyboard(user_id):
+    with open('faq.json', 'r', encoding='utf-8') as f:
+        faq = json.load(f)
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    buttons = []
+    for i, question in enumerate(faq):
+        callback_data = 'question_show_%d' % i
+        button = types.InlineKeyboardButton(question['abbr'], callback_data=callback_data)
+        buttons.append(button)
+    button = types.InlineKeyboardButton('❓ Задать свой вопрос', callback_data='question_custom')
+    buttons.append(button)
+    keyboard.add(*buttons)
+    return keyboard
+
+
+def send_faq_msg(user_id):
+    keyboard = get_faq_inline_keyboard(user_id)
+    msg = bot.send_message(user_id, 'Выберите вопрос', reply_markup=keyboard)
 
 
 def send_user_questions(admin_id, from_last_signout = True, only_unanswered = True):

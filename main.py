@@ -85,31 +85,41 @@ def handle_webcal_msg(message):
     send_calendar_main_msg(message)
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('question'))
-def callback_question_msg(call):
-    # question_{{type}}_{{user_id}}_{{message_id}}
-    call_data = controller.get_call_data(call.data)
-    db = SQLighter(db_name)
-    if call_data[1] == 'answer':
-        def process_answer_step(inner_msg):
-            if inner_msg.text.lower() == 'отмена':
-                controller.show_main_menu(inner_msg.chat.id)
-                return
-            db = SQLighter(db_name)
-            try:
-                bot.send_message(call_data[2], inner_msg.text, reply_to_message_id=call_data[3])
-                bot.edit_message_text('На вопрос дан ответ', call.message.chat.id, call.message.message_id)
-                db.answer_user_question(call_data[2], call_data[3], inner_msg.chat.id, inner_msg.message_id)
-            except Exception as e:
-                print(str(e))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('question_answer'))
+def callback_question_answer_msg(call):
+    def process_answer_step(inner_msg):
+        if inner_msg.text.lower() == 'отмена':
             controller.show_main_menu(inner_msg.chat.id)
+            return
+        db = SQLighter(db_name)
+        # TODO Сделать сохранение user_id и question_id в shelve
+        try:
+            text = 'Помнишь, ты задавал мне вопрос? Я хорошенько подумал, и вот мой ответ:\n%s' % inner_msg.text
+            bot.send_message(user_id, text, reply_to_message_id=question_id)
+            bot.edit_message_text('На вопрос дан ответ', call.message.chat.id, call.message.message_id)
+            db.answer_user_question(user_id, question_id, inner_msg.chat.id, inner_msg.message_id)
+        except Exception as e:
+            print(str(e))
+        controller.show_main_menu(inner_msg.chat.id)
 
-        msg = bot.send_message(call.message.chat.id, 'Напишите ответ на вопрос или введите "отмена"',
-                               reply_markup=types.ReplyKeyboardRemove())
-        bot.register_next_step_handler(msg, process_answer_step)
-    elif call_data[1] == 'decline':
-        bot.edit_message_text('Вопрос отклонён', call.message.chat.id, call.message.message_id)
-    db.answer_user_question(call_data[2], call_data[3], call.message.chat.id)
+    user_id, question_id = controller.get_call_data(call.data)[2:]
+    msg = bot.send_message(call.message.chat.id, 'Напишите ответ на вопрос или введите "Отмена"',
+                           reply_markup=types.ReplyKeyboardRemove())
+    bot.register_next_step_handler(msg, process_answer_step)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('question_decline'))
+def callback_question_decline_msg(call):
+    user_id, question_id = controller.get_call_data(call.data)[2:]
+    db = SQLighter(db_name)
+    bot.edit_message_text('Вопрос отклонён', call.message.chat.id, call.message.message_id)
+    db.answer_user_question(user_id, question_id, call.message.chat.id)
+    text = 'Помнишь, ты задавал этот вопрос? Я подумал... И решил на него не отвечать 😄'
+    text += '\nЕсли хочешь, можешь задать другой вопрос или переформулировать этот 😊'
+    keyboard = types.InlineKeyboardMarkup()
+    callback_data = 'question_custom_%d_%d' % (user_id, question_id)
+    button = types.InlineKeyboardButton('Задать вопрос', callback_data=callback_data)
+    bot.send_message(user_id, text, reply_to_message_id=question_id, reply_markup=keyboard)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_getdate'))
@@ -136,30 +146,10 @@ def callback_schedule_getdate_msg(call):
                           parse_mode='HTML', reply_markup=keyboard)
 
 
-def get_time_inline_keyboard(calendar_index, day):
-    result = types.InlineKeyboardMarkup(row_width=2)
-    buttons = []
-    for hour_max in range(10, 25, 2):
-        hour_min = 0 if hour_max == 10 else hour_max - 2
-        text = 'С %d по %d' % (hour_min, hour_max)
-        callback_data = 'schedule_printevent_%d_%d_%d_%d' % (calendar_index, day, hour_min, hour_max)
-        button = types.InlineKeyboardButton(text, callback_data=callback_data)
-        buttons.append(button)
-    button = types.InlineKeyboardButton('↩ Назад', callback_data='schedule_getdate_%d' % calendar_index)
-    buttons.append(button)
-    result.add(*buttons)
-    return result
-
-
-def send_gettime_msg(user_id, calendar_index, day):
-    keyboard = get_time_inline_keyboard(calendar_index, day)
-    bot.send_message(user_id, 'Выберите время', reply_markup=keyboard)
-
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_gettime'))
 def callback_schedule_gettime_msg(call):
     calendar_index, day = controller.get_call_data(call.data)[2:]
-    send_gettime_msg(call.message.chat.id, calendar_index, day)
+    controller.send_gettime_msg(call.message.chat.id, calendar_index, day)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('schedule_insert'))
@@ -266,62 +256,61 @@ def callback_schedule_printevent_msg(call):
         text += '\n' + controller.get_formatted_event_date(event['datetime_start'], event['datetime_end'])
         bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
     if events:
-        send_gettime_msg(call.message.chat.id, calendar_index, day)
+        controller.send_gettime_msg(call.message.chat.id, calendar_index, day)
     else:
         text = 'С %d:00 по %d:00 не запланировано мероприятий\n' % (hour_min, hour_max)
-        keyboard = get_time_inline_keyboard(calendar_index, day)
+        keyboard = controller.get_time_inline_keyboard(calendar_index, day)
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('question_show'))
+def callback_question_show_msg(call):
+    question_index = controller.get_call_data(call.data)[2]
+    with open('faq.json', 'r', encoding='utf-8') as f:
+        faq = json.load(f)
+    question = faq[question_index]
+    text = '<b>ВОПРОС:</b>\n%s\n\n<b>ОТВЕТ:</b>\n%s' % (question['question'], question['answer'])
+    keyboard = None
+    if question['inline_keyboard_urls']:
+        keyboard = types.InlineKeyboardMarkup()
+        for url in question['inline_keyboard_urls']:
+            button = types.InlineKeyboardButton(text=url['text'], url=url['url'])
+            keyboard.add(button)
+    with shelve.open(shelve_name) as storage:
+        shelve_users = storage['users']
+        message_id = shelve_users[call.message.chat.id]['faq_message_id']
+        if not message_id:
+            msg = bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
+            shelve_users[call.message.chat.id]['faq_message_id'] = msg.message_id
+            storage['users'] = shelve_users
+        else:
+            bot.edit_message_text(text, call.message.chat.id, message_id, parse_mode='HTML', reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('question_custom'))
+def callback_question_custom_msg(call):
+    def process_custom_question_step(inner_msg):
+        if inner_msg.text.lower() == 'отмена':
+            handle_faq_msg(inner_msg)
+            return
+        controller.add_user_question(inner_msg.chat.id, inner_msg.message_id)
+        bot.send_message(inner_msg.chat.id, 'Ваш вопрос отправлен. Я отвечу на него в ближайшее время!')
+        controller.show_main_menu(inner_msg.chat.id)
+
+    keyboard = types.ReplyKeyboardRemove()
+    msg = bot.send_message(call.message.chat.id, 'Напишите вопрос или введите "Отмена"', reply_markup=keyboard)
+    bot.register_next_step_handler(msg, process_custom_question_step)
 
 
 @bot.message_handler(func=lambda msg: msg.text == '❓ Вопросы и ответы')
 def handle_faq_msg(message):
-    with open('faq.json', 'r', encoding='utf-8') as f:
-        faq = json.load(f)
-
-    def process_question_step(inner_msg):
-        def process_custom_question_step(inner_msg2):
-            if inner_msg2.text.lower() == 'отмена':
-                handle_faq_msg(inner_msg2)
-                return
-            controller.add_user_question(inner_msg2.chat.id, inner_msg2.message_id)
-            bot.send_message(inner_msg2.chat.id, 'Ваш вопрос отправлен. Я отвечу на него в ближайшее время!')
-            handle_faq_msg(inner_msg2)
-
-        if inner_msg.text == '❓ Задать свой вопрос':
-            keyboard = types.ReplyKeyboardRemove()
-            msg = bot.send_message(inner_msg.chat.id, 'Напишите вопрос или введите \'Отмена\'', reply_markup=keyboard)
-            bot.register_next_step_handler(msg, process_custom_question_step)
-            return
-        if inner_msg.text == '↩ Вернуться в меню':
-            controller.show_main_menu(inner_msg.chat.id)
-            return
-        with open('faq.json', 'r', encoding='utf-8') as f:
-            faq = json.load(f)
-        question = list(filter(lambda q: q['question'] == inner_msg.text, faq))
-        if not question:
-            msg = bot.send_message(inner_msg.chat.id, 'Не удалось распознать команду')
-            bot.register_next_step_handler(msg, process_question_step)
-            return
-        question = question[0]
-        # TODO Добавить обработку вложений
-        inline_keyboard = None
-        if question['inline_keyboard_urls']:
-            inline_keyboard = types.InlineKeyboardMarkup()
-            for url in question['inline_keyboard_urls']:
-                button = types.InlineKeyboardButton(text=url['text'], url=url['url'])
-                inline_keyboard.add(button)
-        msg = bot.send_message(inner_msg.chat.id, question['answer'], reply_markup=inline_keyboard)
-        bot.register_next_step_handler(msg, process_question_step)
-
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup = []
-    for question in faq:
-        markup.append([question['question']])
-    markup.append(['❓ Задать свой вопрос'])
-    markup.append(['↩ Вернуться в меню'])
-    controller.set_reply_keyboard_markup(keyboard, markup)
-    msg = bot.send_message(message.chat.id, 'Выберите вопрос', reply_markup=keyboard)
-    bot.register_next_step_handler(msg, process_question_step)
+    with shelve.open(shelve_name) as storage:
+        shelve_users = storage['users']
+        if message.chat.id not in shelve_users:
+            shelve_users[message.chat.id] = {}
+        shelve_users[message.chat.id]['faq_message_id'] = None
+        storage['users'] = shelve_users
+    controller.send_faq_msg(message.chat.id)
 
 
 @bot.message_handler(func=lambda msg: msg.text == '👤 Режим пользователя')
@@ -382,7 +371,7 @@ def handle_newsletter_msg(message):
 
 
 def main():
-    controller.show_main_menu()
+    # controller.show_main_menu()
     bot.polling(none_stop=True)
 
 

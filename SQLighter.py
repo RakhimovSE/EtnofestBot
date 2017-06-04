@@ -60,7 +60,6 @@ class SQLighter:
 
     def answer_user_question(self, user_id, question_id, answer_user_id, answer_message_id=None):
         with self.connection:
-            print(answer_message_id)
             self.cursor.execute('UPDATE user_question SET answer_user_id = ?, answer_message_id = ?'
                                 'WHERE user_id = ? AND id_question = ?',
                                 (answer_user_id, answer_message_id, user_id, question_id,))
