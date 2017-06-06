@@ -120,6 +120,7 @@ class GoogleCalendarApi:
                 [db.insert_event(calendar['id_calendar'], event['id']) for event in response['items']]
                 response['calendar_id'] = calendar['id_calendar']
                 response['calendar_index'] = calendar['index']
+                response['calendar_name'] = calendar['name']
                 responses.append(response)
         else:
             response = self.service.events().list(
@@ -129,6 +130,7 @@ class GoogleCalendarApi:
             response['calendar_id'] = calendar_id
             calendar = db.get_calendar_by_id(calendar_id)
             response['calendar_index'] = calendar['index']
+            response['calendar_name'] = calendar['name']
             responses.append(response)
         events = []
         for response in responses:
@@ -137,7 +139,7 @@ class GoogleCalendarApi:
                 'calendar_index': response['calendar_index'],
                 'id': event['id'],
                 'event_index': db.get_event_by_id(response['calendar_id'], event['id'])['index'],
-                'area': response['summary'],
+                'area': response['calendar_name'],
                 'name': event['summary'],
                 'location': event.get('location', ''),
                 'datetime_start': dateutil.parser.parse(event['start'].get('dateTime', event['start'].get('date'))),

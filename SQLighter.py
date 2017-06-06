@@ -77,6 +77,12 @@ class SQLighter:
             except:
                 pass
 
+    def get_event_liked_count(self, calendar_id, event_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT COUNT(*) AS "count" FROM user_event WHERE'
+                                         ' calendar_id = ? AND event_id = ?', (calendar_id, event_id,)).fetchone()
+            return result['count']
+
     def delete_user_event(self, user_id, calendar_id, event_id):
         with self.connection:
             self.cursor.execute('DELETE FROM user_event WHERE user_id = ? AND calendar_id = ? AND event_id = ?',

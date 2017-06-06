@@ -33,9 +33,13 @@ def get_md5(text):
 
 
 def get_formatted_event_date(datetime_start, datetime_end):
-    result = '%s - %s (%s)' % (datetime.strftime(datetime_start, '%H:%M'),
-                               datetime.strftime(datetime_end, '%H:%M'),
-                               datetime.strftime(datetime_start, '%d.%m'))
+    if datetime_start != datetime_end:
+        result = '%s - %s (%s)' % (datetime.strftime(datetime_start, '%H:%M'),
+                                   datetime.strftime(datetime_end, '%H:%M'),
+                                   datetime.strftime(datetime_start, '%d.%m'))
+    else:
+        result = '%s (%s)' % (datetime.strftime(datetime_start, '%H:%M'),
+                              datetime.strftime(datetime_start, '%d.%m'))
     return result
 
 
@@ -71,6 +75,9 @@ def send_user_question(admin_id, user_id, question_id):
 def get_time_inline_keyboard(calendar_index, day):
     result = types.InlineKeyboardMarkup(row_width=2)
     buttons = []
+    callback_data = 'schedule_printevent_%d_%d_0_24' % (calendar_index, day)
+    button = types.InlineKeyboardButton('Весь день', callback_data=callback_data)
+    result.add(button)
     for hour_max in range(10, 25, 2):
         hour_min = 0 if hour_max == 10 else hour_max - 2
         text = 'С %d по %d' % (hour_min, hour_max)
@@ -83,9 +90,20 @@ def get_time_inline_keyboard(calendar_index, day):
     return result
 
 
-def send_gettime_msg(user_id, calendar_index, day):
+def send_gettime_msg(call, calendar_index, day, new_message = True):
     keyboard = get_time_inline_keyboard(calendar_index, day)
-    bot.send_message(user_id, 'Выберите время', reply_markup=keyboard)
+    if calendar_index != -1:
+        db = SQLighter(db_name)
+        calendar = db.get_calendar_by_index(calendar_index)
+        text = 'Площадка <b>"%s"</b>' % calendar['name']
+    else:
+        text = '<b>Все</b> площадки'
+    text += '\n<i>%d июня</i>\n\nКакое время тебя интересует?' % day
+    if new_message:
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML', reply_markup=keyboard)
+    else:
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                              parse_mode='HTML', reply_markup=keyboard)
 
 
 def get_faq_inline_keyboard(user_id):
@@ -105,7 +123,7 @@ def get_faq_inline_keyboard(user_id):
 
 def send_faq_msg(user_id):
     keyboard = get_faq_inline_keyboard(user_id)
-    msg = bot.send_message(user_id, 'Выберите вопрос', reply_markup=keyboard)
+    msg = bot.send_message(user_id, 'Выбери вопрос или задай свой, если не нашел ответ!', reply_markup=keyboard)
 
 
 def send_user_questions(admin_id, from_last_signout = True, only_unanswered = True):
@@ -160,15 +178,16 @@ def get_call_data(data):
 
 def show_main_menu(user_id=None):
     db = SQLighter(db_name)
+    text = 'Привет! Как я могу тебе помочь?'
     if user_id:
-        bot.send_message(user_id, 'Выберите пункт меню',
+        bot.send_message(user_id, text,
                          reply_markup=get_keyboard(user_id), disable_notification=True)
         return
     users = db.get_all_users()
     for user in users:
         try:
             keyboard = get_keyboard(user['id_user'])
-            bot.send_message(user['id_user'], 'Выберите пункт меню',
+            bot.send_message(user['id_user'], text,
                              reply_markup=keyboard, disable_notification=True)
         except Exception as e:
             print(str(e))
