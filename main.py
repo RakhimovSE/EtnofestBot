@@ -5,6 +5,7 @@ import configparser
 import json
 import shelve
 import dateutil.parser
+# import httplib2shim
 
 import controller
 from GoogleCalendarApi import GoogleCalendarApi
@@ -20,6 +21,7 @@ shelve_name = config.get('BOT', 'shelve_name')
 with shelve.open(shelve_name) as storage:
     if not 'users' in storage:
         storage['users'] = {}
+# httplib2shim.patch()
 gcal_api = GoogleCalendarApi()
 
 
@@ -74,7 +76,8 @@ def send_calendar_main_msg(message, edit_message=False):
     keyboard.add(*buttons)
     html_links = gcal_api.get_html_links()
     text = 'Выбери площадку, расписание которой ты хочешь посмотреть'
-    text += '\nЕще ты можешь подписаться на календари по площадкам. Они появятся в твоем календаре на телефоне.\n'
+    text += '\nЕще ты можешь подписаться на календари по площадкам. Они появятся в твоем календаре на телефоне ' \
+            '<i>(функция может работать не поддерживаться на некоторых устройствах)</i>.\n'
     text += '\n'.join(html_links)
     if edit_message:
         bot.edit_message_text(text, message.chat.id, message.message_id, parse_mode='HTML', reply_markup=keyboard)
@@ -318,7 +321,7 @@ def callback_question_show_msg(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('question_custom'))
 def callback_question_custom_msg(call):
     def process_custom_question_step(inner_msg):
-        if inner_msg.text.lower() == 'отмена':
+        if inner_msg.text and inner_msg.text.lower() == 'отмена':
             controller.show_main_menu(inner_msg.chat.id)
             return
         controller.add_user_question(inner_msg.chat.id, inner_msg.message_id)

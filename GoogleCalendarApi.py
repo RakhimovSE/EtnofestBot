@@ -77,7 +77,10 @@ class GoogleCalendarApi:
         return result
 
     def get_event(self, calendar_id, event_id):
-        response = self.service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        try:
+            response = self.service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        except:
+            return None
         if response['status'] != 'confirmed':
             return None
         db = SQLighter(self.__config.get('BOT', 'db_name'))
@@ -114,24 +117,30 @@ class GoogleCalendarApi:
         calendars = db.get_calendars()
         if not calendar_id:
             for calendar in calendars:
+                try:
+                    response = self.service.events().list(
+                        calendarId=calendar['id_calendar'], timeMin=time_min, timeMax=time_max,
+                        singleEvents=True, orderBy='startTime').execute()
+                    [db.insert_event(calendar['id_calendar'], event['id']) for event in response['items']]
+                    response['calendar_id'] = calendar['id_calendar']
+                    response['calendar_index'] = calendar['index']
+                    response['calendar_name'] = calendar['name']
+                    responses.append(response)
+                except:
+                    pass
+        else:
+            try:
                 response = self.service.events().list(
-                    calendarId=calendar['id_calendar'], timeMin=time_min, timeMax=time_max,
+                    calendarId=calendar_id, timeMin=time_min, timeMax=time_max,
                     singleEvents=True, orderBy='startTime').execute()
-                [db.insert_event(calendar['id_calendar'], event['id']) for event in response['items']]
-                response['calendar_id'] = calendar['id_calendar']
+                [db.insert_event(calendar_id, event['id']) for event in response['items']]
+                response['calendar_id'] = calendar_id
+                calendar = db.get_calendar_by_id(calendar_id)
                 response['calendar_index'] = calendar['index']
                 response['calendar_name'] = calendar['name']
                 responses.append(response)
-        else:
-            response = self.service.events().list(
-                calendarId=calendar_id, timeMin=time_min, timeMax=time_max,
-                singleEvents=True, orderBy='startTime').execute()
-            [db.insert_event(calendar_id, event['id']) for event in response['items']]
-            response['calendar_id'] = calendar_id
-            calendar = db.get_calendar_by_id(calendar_id)
-            response['calendar_index'] = calendar['index']
-            response['calendar_name'] = calendar['name']
-            responses.append(response)
+            except:
+                pass
         events = []
         for response in responses:
             events.extend([{

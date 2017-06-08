@@ -9,7 +9,7 @@
   {
     "question": "Где можно посмотреть программу фестиваля?",
     "abbr": "Программа фестиваля?",
-    "answer": "Смотрите раздел сайта Расписание [в разработке]\nСмотреть музыкальную программу\nПрограмма \"Дети Мира - 2017\" \"Позволь мне быть собой\" (формируется)",
+    "answer": "Расписание доступно по ссылкам ниже, а также в чат-боте в разделе \"Расписание\"",
     "attachments": [],
     "inline_keyboard_urls": [
       {
@@ -19,6 +19,22 @@
       {
         "text": "Дети Мира - 2017",
         "url": "https://docs.google.com/spreadsheets/d/1ASEncIiOs9lDfS9DJDCqRZAHEVExoJ6Mf1nbD2-qp7s/edit#gid=0"
+      },
+      {
+        "text": "Русский городок",
+        "url": "https://docs.google.com/spreadsheets/d/1PPkV-C3biDAXfrJbSS4KRpgmpwkLFlzIhfu03NYgK8k/edit#gid=65682735"
+      },
+      {
+        "text": "Театральная программа",
+        "url": "https://docs.google.com/spreadsheets/d/1EQRh3Iwb2vy7HJdhYjwE4pW-DP_HDEflVLgkVfnspEo/edit#gid=0"
+      },
+      {
+        "text": "Ведический городок",
+        "url": "https://docs.google.com/spreadsheets/d/1-4ePnNf12UGDtYSQf1hoZW94cXzUU6sKg49SVbUc41Q/edit#gid=0"
+      },
+      {
+        "text": "Оздоровительная площадка",
+        "url": "https://docs.google.com/spreadsheets/d/1jcru3wYlrE96kfFpAhRdQF4b5x5J2XMpK0fDd6JNMNw/edit#gid=0"
       }
     ]
   },
