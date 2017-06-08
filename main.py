@@ -342,6 +342,160 @@ def handle_faq_msg(message):
     controller.send_faq_msg(message.chat.id)
 
 
+@bot.message_handler(func=lambda msg: msg.text == '👫 Познакомиться')
+def handle_networking_msg(message):
+    text = 'Прежде, чем начать знакомиться с другими людьми, расскажи о себе. ' \
+           'Все эти вопросы помогут как можно точнее подобрать человека, ' \
+           'соответствующего твоим интересам.\n\n[1/3]\nДля начала, напомни был ли ты ' \
+           'на Этнофестивале "Небо и Земля" раньше?'
+    keyboard = types.InlineKeyboardMarkup()
+    buttons = [
+        types.InlineKeyboardButton('Да', callback_data='networking_first_0'),
+        types.InlineKeyboardButton('Нет', callback_data='networking_first_1')
+    ]
+    keyboard.add(*buttons)
+    bot.send_message(message.chat.id, text, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_first'))
+def callback_networking_first_msg(call):
+    first_time = controller.get_call_data(call.data)[2]
+    db = SQLighter(db_name)
+    db.set_user_first_time(call.message.chat.id, first_time)
+    if not first_time:
+        text = '[1/3]\nУх ты! У тебя уже есть опыт!\nХочешь помогать, отвечая на вопросы тех, ' \
+               'кто еще не был на Этнофестивале?\nЕсли ответишь "Да", я буду время от времени ' \
+               'присылать тебе вопросы других участников. Это тебя ни к чему не обязывает'
+        keyboard = types.InlineKeyboardMarkup()
+        buttons = [
+            types.InlineKeyboardButton('Да', callback_data='networking_answer_1'),
+            types.InlineKeyboardButton('Нет', callback_data='networking_answer_0')
+        ]
+        keyboard.add(*buttons)
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+    else:
+        callback_networking_days(call)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_answer'))
+def callback_networking_answer(call):
+    send_questions = controller.get_call_data(call.data)[2]
+    db = SQLighter(db_name)
+    db.set_user_send_questions(call.message.chat.id, send_questions)
+    callback_networking_days(call)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_days'))
+def callback_networking_days(call):
+    def get_networking_days_inline_keyboard(user_id):
+        result = types.InlineKeyboardMarkup(row_width=2)
+        button = types.InlineKeyboardButton('У меня нет билета', callback_data='networking_buy')
+        result.add(button)
+        buttons = []
+        db = SQLighter(db_name)
+        for i in range(8, 13):
+            visit = db.user_visits_day(user_id, i)
+            text = '✅' if visit else '🔲'
+            text += ' %d июня' % i
+            callback_data = 'networking_days_%d_%d' % (i, int(not visit))
+            button = types.InlineKeyboardButton(text, callback_data=callback_data)
+            buttons.append(button)
+        button = types.InlineKeyboardButton('➡ Дальше', callback_data='networking_gender')
+        buttons.append(button)
+        result.add(*buttons)
+        return result
+
+    if call.data.startswith('networking_days'):
+        try:
+            day, visit = controller.get_call_data(call.data)[2:]
+            db = SQLighter(db_name)
+            db.set_user_visit_day(call.message.chat.id, day, visit)
+        except:
+            pass
+    keyboard = get_networking_days_inline_keyboard(call.message.chat.id)
+    text = '[2/3]\nВыбери дни фестиваля, в которые ты собираешься ехать'
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_buy'))
+def callback_networking_buy(call):
+    text = '[2/3]\nОх, ох, ох! Надо покупать прямо сейчас, пока есть билеты!'
+    keyboard = types.InlineKeyboardMarkup()
+    links = [
+        {
+            'text': 'Купить на сайте',
+            'url': 'http://etnofestival.com/tickets'
+        },
+        {
+            'text': 'Древо жизни (в магазине)',
+            'url': 'https://vk.com/natur_shop'
+        },
+        {
+            'text': 'МАСТЕРСКАЯ ПОДАРКОВ (в магазине)',
+            'url': 'https://vk.com/hmshop72'
+        }
+    ]
+    for link in links:
+        button = types.InlineKeyboardButton(link['text'], link['url'])
+        keyboard.add(button)
+    button = types.InlineKeyboardButton('Куплю на входе', callback_data='networking_days')
+    keyboard.add(button)
+    button = types.InlineKeyboardButton('↩ Назад', callback_data='networking_days')
+    keyboard.add(button)
+    bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_gender'))
+def callback_networking_gender(call):
+    try:
+        if not call.data.startswith('networking_gender'):
+            raise Exception()
+        male = controller.get_call_data(call.data)[2]
+        db = SQLighter(db_name)
+        db.set_user_gender(call.message.chat.id, male)
+        callback_networking_age(call)
+    except:
+        text = 'Укажи свой пол'
+        keyboard = types.InlineKeyboardMarkup()
+        buttons = [
+            types.InlineKeyboardButton('Мужской', callback_data='networking_gender_1'),
+            types.InlineKeyboardButton('Женский', callback_data='networking_gender_0')
+        ]
+        keyboard.add(*buttons)
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('networking_age'))
+def callback_networking_age(call):
+    def process_networking_age_step(inner_msg):
+        try:
+            age = inner_msg.text
+            if not controller.is_digit(age) or not 0 <= age <= 99:
+                raise Exception()
+            db = SQLighter(db_name)
+            db.set_user_age(inner_msg.chat.id, age)
+            keyboard = controller.get_keyboard(inner_msg.chat.id)
+            text = 'Отлично! Я с тобой познакомился!\nТеперь я могу предложить тебе ' \
+                   'познакомиться с другими участниками фестиваля'
+            msg = bot.send_message(inner_msg.chat.id, text, reply_markup=keyboard)
+            keyboard = types.InlineKeyboardMarkup()
+            buttons = [
+                types.InlineKeyboardButton('Найти ❤', callback_data='networking_love'),
+                types.InlineKeyboardButton('Найти друга', callback_data='networking_friend')
+            ]
+            keyboard.add(*buttons)
+            bot.edit_message_reply_markup(msg.chat.id, msg.message_id, reply_markup=keyboard)
+        except:
+            text = '[3/3]\nУпс! Похоже, ты неправильно указал свой возраст. Попробуй еще раз!'
+            msg = bot.send_message(inner_msg.chat.id, text)
+            bot.register_next_step_handler(msg, process_networking_age_step)
+
+    text = '[3/3]\nКласс! Впиши свой возраст'
+    keyboard = types.ReplyKeyboardRemove()
+    msg = bot.send_message(call.message.chat.id, text, reply_markup=keyboard)
+    bot.register_next_step_handler(msg, process_networking_age_step)
+
+
 @bot.message_handler(func=lambda msg: msg.text == '👤 Режим пользователя')
 def handle_logout_msg(message):
     db = SQLighter(db_name)

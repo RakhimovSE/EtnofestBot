@@ -144,5 +144,43 @@ class SQLighter:
                 result = self.cursor.execute('INSERT INTO event (calendar_id, id_event) VALUES (?, ?)',
                                             (calendar_id, event_id,))
 
+    def set_user_first_time(self, user_id, first_time):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET first_time = ? WHERE id_user = ?', (first_time, user_id,))
+
+    def set_user_send_questions(self, user_id, send_questions):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET send_questions = ? WHERE id_user = ?', (send_questions, user_id,))
+
+    def insert_user_day(self, user_id, day, visit=False):
+        with self.connection:
+            try:
+                self.cursor.execute('INSERT INTO user_days (user_id, "day", visit) VALUES (?, ?, ?)',
+                                    (user_id, day, visit,))
+            except:
+                pass
+
+    def user_visits_day(self, user_id, day):
+        with self.connection:
+            result = self.cursor.execute('SELECT visit FROM user_days WHERE user_id = ? AND "day" = ?',
+                                         (user_id, day,)).fetchone()
+            if not result:
+                self.insert_user_day(user_id, day)
+                return False
+            return result['visit']
+
+    def set_user_visit_day(self, user_id, day, visit):
+        with self.connection:
+            self.cursor.execute('UPDATE user_days SET visit = ? WHERE user_id = ? AND "day" = ?',
+                                (visit, user_id, day,))
+
+    def set_user_gender(self, user_id, male):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET male = ? WHERE id_user = ?', (male, user_id,))
+
+    def set_user_age(self, user_id, age):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET age = ? WHERE id_user = ?', (age, user_id,))
+
     def close(self):
         self.connection.close()
