@@ -176,6 +176,34 @@ def get_call_data(data):
     return result
 
 
+def send_networking_users(request_user_id, users):
+    for user in users:
+        if user['last_name']:
+            text = '%s %s, возраст: %d' % (user['first_name'], user['last_name'], user['age'])
+        else:
+            text = '%s, возраст: %d' % (user['first_name'], user['age'])
+        keyboard = types.InlineKeyboardMarkup()
+        buttons = [
+            types.InlineKeyboardButton('👍', callback_data='networking_like_%d' % user['id_user']),
+            types.InlineKeyboardButton('👎', callback_data='networking_dislike_%d' % user['id_user'])
+        ]
+        keyboard.add(*buttons)
+        photo_id = get_user_profile_photo_id(user['id_user'])
+        if photo_id:
+            bot.send_photo(request_user_id, photo_id, caption=text, reply_markup=keyboard)
+        else:
+            bot.send_message(request_user_id, text, reply_markup=keyboard)
+    if not users:
+        text = 'Пока что я не могу кого-то тебе посоветовать 🤔 ' \
+               'Попробуй чуть позже, когда со мной познакомятся новые люди 😊'
+        bot.send_message(request_user_id, text)
+
+
+def get_user_profile_photo_id(user_id):
+    photo = bot.get_user_profile_photos(user_id, limit=1)
+    return photo.photos[0][0].file_id if photo.total_count > 0 else None
+
+
 def show_main_menu(user_id=None):
     db = SQLighter(db_name)
     text = 'Привет! Как я могу тебе помочь?'
@@ -213,6 +241,7 @@ def __get_user_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup = [
         ['📆 Расписание'],
+        ['👫 Познакомиться'],
         ['❓ Вопросы и ответы']
     ]
     set_reply_keyboard_markup(keyboard, markup)

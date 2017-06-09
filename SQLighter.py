@@ -142,7 +142,7 @@ class SQLighter:
         with self.connection:
             if not self.get_event_by_id(calendar_id, event_id):
                 result = self.cursor.execute('INSERT INTO event (calendar_id, id_event) VALUES (?, ?)',
-                                            (calendar_id, event_id,))
+                                             (calendar_id, event_id,))
 
     def set_user_first_time(self, user_id, first_time):
         with self.connection:
@@ -174,13 +174,85 @@ class SQLighter:
             self.cursor.execute('UPDATE user_days SET visit = ? WHERE user_id = ? AND "day" = ?',
                                 (visit, user_id, day,))
 
-    def set_user_gender(self, user_id, male):
+    def set_user_gender(self, user_id, male=None):
         with self.connection:
             self.cursor.execute('UPDATE user SET male = ? WHERE id_user = ?', (male, user_id,))
 
-    def set_user_age(self, user_id, age):
+    def set_user_age(self, user_id, age=None):
         with self.connection:
             self.cursor.execute('UPDATE user SET age = ? WHERE id_user = ?', (age, user_id,))
+
+    def user_sended_info(self, user_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM user WHERE id_user = ?', (user_id,)).fetchone()
+            return result and result['age']
+
+    def remove_user_info(self, user_id):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET first_time = NULL, send_questions = NULL, male = NULL, age = NULL '
+                                'WHERE id_user = ?', (user_id,))
+
+    def get_love_users(self, user_id, count=10):
+        with self.connection:
+            user = self.cursor.execute('SELECT * FROM user WHERE id_user = ?', (user_id,)).fetchone()
+            result = self.cursor.execute('SELECT * FROM user WHERE id_user <> ? AND male = ? AND age >= 18 '
+                                         'ORDER BY ABS(age - ?) LIMIT ?',
+                                         (user['id_user'], int(not user['male']), user['age'], count,)).fetchall()
+            return result
+
+    def set_user_forward_message(self, user_id, forward_message_id):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET forward_message_id = ? WHERE id_user = ?',
+                                (forward_message_id, user_id,))
+
+    def get_user_forward_message(self, user_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT forward_message_id FROM user WHERE id_user = ?',
+                                         (user_id,)).fetchone()
+            return result['forward_message_id'] if result else None
+
+    def get_interest(self, interest_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM interest WHERE id_interest = ?', (interest_id,)).fetchone()
+            return result
+
+    def get_interests(self):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM interest').fetchall()
+            return result
+
+    def set_user_interest(self, user_id, interest_id):
+        with self.connection:
+            self.cursor.execute('UPDATE user SET interest_id = ? WHERE id_user = ?',
+                                (interest_id, user_id,))
+
+    def get_user_interest(self, user_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT interest_id FROM user WHERE id_user = ?', (user_id,)).fetchone()
+            return result['interest_id'] if result else None
+
+    def get_friend_users(self, user_id, interest_id):
+        with self.connection:
+            result = self.cursor.execute('SELECT * FROM user WHERE id_user <> ? AND interest_id = ? AND id_user '
+                                         'NOT IN (SELECT desired_user_id FROM networking WHERE willing_user_id = ?)',
+                                         (user_id, interest_id, user_id,)).fetchall()
+            return result
+
+    def set_desired_user(self, willing_user_id, desired_user_id, like):
+        with self.connection:
+            try:
+                self.cursor.execute('INSERT INTO networking VALUES (?, ?, ?)',
+                                    (willing_user_id, desired_user_id, int(like),))
+            except:
+                pass
+
+    def connect_users(self, user1_id, user2_id):
+        with self.connection:
+            result = self.cursor.execute(
+                'SELECT COUNT(*) AS count FROM networking WHERE "like" = 1 AND '
+                '(willing_user_id = ? AND desired_user_id = ? OR willing_user_id = ? AND desired_user_id = ?)',
+                (user1_id, user2_id, user2_id, user1_id,)).fetchone()
+            return result['count'] == 2
 
     def close(self):
         self.connection.close()
